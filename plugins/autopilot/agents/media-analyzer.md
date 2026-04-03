@@ -27,10 +27,14 @@ You also receive the `source_id` (issue/ticket number) for organizing output.
 
 ## Working Directory
 
-Create a temp directory for downloads:
+Create the project-local temp directory for downloads:
 
 ```
-/tmp/media-analysis-<source_id>/
+mkdir -p .tmp
+```
+
+```
+.tmp/media-analysis-<source_id>/
 ```
 
 ## Analysis by Type
@@ -53,7 +57,7 @@ If token extraction fails, report the limitation and attempt direct download as 
 
 1. Download each image:
 ```
-curl -sL -o /tmp/media-analysis-<source_id>/<filename> -H "Authorization: Bearer $TOKEN" "<api_url>"
+curl -sL -o .tmp/media-analysis-<source_id>/<filename> -H "Authorization: Bearer $TOKEN" "<api_url>"
 ```
 
 2. Read the downloaded image using the Read tool (it supports image files).
@@ -67,17 +71,17 @@ curl -sL -o /tmp/media-analysis-<source_id>/<filename> -H "Authorization: Bearer
 
 1. Download the video:
 ```
-curl -sL -o /tmp/media-analysis-<source_id>/<filename> "<url>"
+curl -sL -o .tmp/media-analysis-<source_id>/<filename> "<url>"
 ```
 
 2. Get video duration and metadata:
 ```
-ffprobe -v quiet -print_format json -show_format -show_streams "/tmp/media-analysis-<source_id>/<filename>"
+ffprobe -v quiet -print_format json -show_format -show_streams ".tmp/media-analysis-<source_id>/<filename>"
 ```
 
 3. Extract frames every 5 seconds:
 ```
-ffmpeg -i "/tmp/media-analysis-<source_id>/<filename>" -vf "fps=1/5" -q:v 2 "/tmp/media-analysis-<source_id>/frame_%04d.jpg"
+ffmpeg -i ".tmp/media-analysis-<source_id>/<filename>" -vf "fps=1/5" -q:v 2 ".tmp/media-analysis-<source_id>/frame_%04d.jpg"
 ```
 
 4. Burn timestamps into each frame for reference:
@@ -89,7 +93,7 @@ magick <frame>.jpg -font /System/Library/Fonts/Helvetica.ttc -gravity NorthWest 
 
 6. Extract any embedded subtitles or text tracks:
 ```
-ffmpeg -i "/tmp/media-analysis-<source_id>/<filename>" -map 0:s:0 "/tmp/media-analysis-<source_id>/subtitles.srt" 2>/dev/null
+ffmpeg -i ".tmp/media-analysis-<source_id>/<filename>" -map 0:s:0 ".tmp/media-analysis-<source_id>/subtitles.srt" 2>/dev/null
 ```
 
 7. Transcribe audio narration using whisper-cpp (local, free, no API key needed).
@@ -128,13 +132,13 @@ Use large-v3 if total RAM >= 16GB. Fall back to medium if < 16GB or if large-v3 
 
 Then transcribe:
 ```
-ffmpeg -i "/tmp/media-analysis-<source_id>/<filename>" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/media-analysis-<source_id>/audio.wav"
-whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f "/tmp/media-analysis-<source_id>/audio.wav" -osrt -l auto
+ffmpeg -i ".tmp/media-analysis-<source_id>/<filename>" -ar 16000 -ac 1 -c:a pcm_s16le ".tmp/media-analysis-<source_id>/audio.wav"
+whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f ".tmp/media-analysis-<source_id>/audio.wav" -osrt -l auto
 ```
 
 If large-v3 fails (out of memory, crash), retry with medium:
 ```
-whisper-cli -m ~/.local/share/whisper-models/ggml-medium.bin -f "/tmp/media-analysis-<source_id>/audio.wav" -osrt -l auto
+whisper-cli -m ~/.local/share/whisper-models/ggml-medium.bin -f ".tmp/media-analysis-<source_id>/audio.wav" -osrt -l auto
 ```
 
 This produces an SRT file with timestamped transcription. The model auto-detects language. The narration often contains critical context not present in the ticket text (e.g., root cause explanations, expected behavior, reproduction steps).
@@ -202,4 +206,4 @@ Send MEDIA_ANALYSIS via SendMessage to the requesting agent (issue-analyst or ti
 - If ffmpeg/ffprobe is not available, report it clearly and fall back to describing what the URL likely contains based on filename and context.
 - If a download fails (auth required, expired URL), report the failure and move on.
 - Keep the MEDIA_ANALYSIS focused on facts observed, not speculation.
-- Clean up downloaded files after analysis: `rm -rf /tmp/media-analysis-<source_id>/`
+- Clean up downloaded files after analysis: `rm -rf .tmp/media-analysis-<source_id>/`

@@ -96,34 +96,39 @@ GitHub attachments can typically be downloaded directly without auth.
 
 ### Videos (.mp4, .mov, .webm, Loom links)
 
-1. Download the video:
+1. Ensure temp directory exists:
 ```
-curl -sL -o /tmp/ticket-analysis-video.<ext> "<url>"
-```
-
-2. Get duration:
-```
-ffprobe -v quiet -print_format json -show_format "/tmp/ticket-analysis-video.<ext>"
+mkdir -p .tmp
 ```
 
-3. Extract frames every 5 seconds:
+2. Download the video:
 ```
-ffmpeg -i "/tmp/ticket-analysis-video.<ext>" -vf "fps=1/5" -q:v 2 "/tmp/ticket-frames/frame_%04d.jpg"
+curl -sL -o .tmp/ticket-analysis-video.<ext> "<url>"
 ```
 
-4. Burn timestamps into frames for reference:
+3. Get duration:
+```
+ffprobe -v quiet -print_format json -show_format ".tmp/ticket-analysis-video.<ext>"
+```
+
+4. Extract frames every 5 seconds:
+```
+ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -vf "fps=1/5" -q:v 2 ".tmp/ticket-frames/frame_%04d.jpg"
+```
+
+5. Burn timestamps into frames for reference:
 ```
 magick <frame>.jpg -font /System/Library/Fonts/Helvetica.ttc -gravity NorthWest -pointsize 36 -fill white -undercolor '#000000CC' -annotate +10+10 " <HH:MM:SS> " <frame>_ts.jpg
 ```
 
-5. Read each frame with the Read tool to build a visual timeline of what the video shows.
+6. Read each frame with the Read tool to build a visual timeline of what the video shows.
 
-6. Extract subtitles if present:
+7. Extract subtitles if present:
 ```
-ffmpeg -i "/tmp/ticket-analysis-video.<ext>" -map 0:s:0 "/tmp/ticket-subtitles.srt" 2>/dev/null
+ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -map 0:s:0 ".tmp/ticket-subtitles.srt" 2>/dev/null
 ```
 
-7. Transcribe audio narration using whisper-cpp (local, free, no API key).
+8. Transcribe audio narration using whisper-cpp (local, free, no API key).
 
 First check if whisper-cli and the model are available:
 ```
@@ -156,15 +161,15 @@ Use large-v3 if >= 16GB RAM, fall back to medium otherwise.
 
 Then transcribe:
 ```
-ffmpeg -i "/tmp/ticket-analysis-video.<ext>" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/ticket-analysis-audio.wav"
-whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f "/tmp/ticket-analysis-audio.wav" -osrt -l auto
+ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -ar 16000 -ac 1 -c:a pcm_s16le ".tmp/ticket-analysis-audio.wav"
+whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f ".tmp/ticket-analysis-audio.wav" -osrt -l auto
 ```
 
 If large-v3 fails (out of memory), retry with medium model.
 
 Auto-detects language. Narration often contains critical context missing from ticket text (root cause, expected behavior, reproduction steps). Treat transcription with equal weight to the written ticket body.
 
-8. Clean up downloaded media after analysis.
+9. Clean up downloaded media after analysis.
 
 ### Documents (.pdf, .doc)
 - Download and read using the Read tool
@@ -302,5 +307,5 @@ confidence: <HIGH|MEDIUM|LOW>
 
 Remove any downloaded media files after analysis:
 ```
-rm -rf /tmp/ticket-analysis-video.* /tmp/ticket-frames/ /tmp/ticket-subtitles.srt /tmp/ticket-analysis-audio.wav
+rm -rf .tmp/ticket-analysis-video.* .tmp/ticket-frames/ .tmp/ticket-subtitles.srt .tmp/ticket-analysis-audio.wav
 ```
