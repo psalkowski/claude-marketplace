@@ -36,6 +36,8 @@ You receive:
 - TASK_COMPLETE from implementers (what was built)
 - UI_SPEC from ui-designer (expected UI behavior)
 - DESIGN_SCREENSHOTS paths (from design-explorer, if available) — reference screenshots for design fidelity comparison
+- BUG_BASELINE from bug-reproducer (if available — for before/after comparison on bug fixes)
+- ISSUE_CLASSIFICATION from issue-analyst (for cross-role verification decisions)
 - List of modified files (to understand scope of changes)
 
 ## App URL
@@ -143,6 +145,61 @@ If DESIGN_SCREENSHOTS paths were provided (from design-explorer's output), perfo
    - Include specific deviations
    - Include both reference and actual screenshot paths for the implementer to compare
    - This triggers the feedback loop — frontend-developer gets the reference screenshots + deviation details to fix
+
+## Bug Verification (Before/After)
+
+When BUG_BASELINE is provided (from bug-reproducer in Phase 1.5), perform targeted bug verification BEFORE running general test scenarios:
+
+1. Re-run the EXACT reproduction steps from BUG_BASELINE.REPRODUCTION_STEPS
+2. At each step, take a screenshot matching the baseline evidence
+3. Compare current state against baseline:
+   - The reported bug symptom should NO LONGER occur
+   - Console errors listed in BUG_BASELINE.BASELINE_EVIDENCE.console_errors should be resolved
+   - Network failures listed in BUG_BASELINE.BASELINE_EVIDENCE.network_failures should now succeed
+   - No NEW console errors or network failures introduced
+4. Save "after" screenshots to `docs/qa/evidences/bug-after-$SOURCE_ID/` with matching filenames
+5. Check each item in BUG_BASELINE.VERIFICATION_CRITERIA
+
+Include before/after comparison results in QA_REPORT:
+
+```
+BUG_VERIFICATION:
+  status: FIXED | NOT_FIXED | PARTIALLY_FIXED | REGRESSED
+  before_screenshots: [paths from BUG_BASELINE]
+  after_screenshots: [paths from this run]
+  criteria_results:
+    - {criterion}: PASS/FAIL
+  new_issues: [any new console errors or network failures not in baseline]
+```
+
+If NOT_FIXED or REGRESSED: report as QA_FAILURE with type `bug-verification` — this takes priority over all other scenarios.
+
+## Cross-Role Verification
+
+When ISSUE_CLASSIFICATION indicates the change involves permissions, authorization, roles, visibility conditions, or access control:
+
+1. After completing all standard test scenarios with the primary user, identify which user roles are relevant to the change
+2. For each additional role (e.g., admin vs regular user, owner vs viewer, authenticated vs guest):
+   - Switch user context (log out and log in as different user, or use role-switching if available)
+   - Re-run the core scenario that was affected by the bug/feature
+   - Verify:
+     - The **target role** sees the correct new behavior
+     - **Other roles** see unchanged behavior — they must NOT gain access to pages, features, or data they couldn't access before
+     - Edge cases: users with partial permissions, users from different organizations/tenants
+3. Permission regressions are CRITICAL severity — granting unintended access is worse than the original bug
+
+Include cross-role results in QA_REPORT:
+
+```
+CROSS_ROLE_VERIFICATION:
+  roles_tested: [list of roles]
+  results:
+    - role: {role_name}
+      expected: {what this role should see}
+      actual: {what this role sees}
+      status: PASS/FAIL
+  permission_regressions: none | [list of unintended access changes]
+```
 
 ## Result Reporting
 

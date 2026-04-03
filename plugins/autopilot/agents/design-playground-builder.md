@@ -147,9 +147,14 @@ function updatePrompt() {
 
 ## Output
 
-Write the HTML file to: `/tmp/design-playground-{issue-number}.html`
+Ensure temp directory exists:
+```
+mkdir -p .tmp
+```
 
-Open it in the browser: `open /tmp/design-playground-{issue-number}.html`
+Write the HTML file to: `.tmp/design-playground-{issue-number}.html`
+
+Open it in the browser: `open .tmp/design-playground-{issue-number}.html`
 
 Send `DESIGN_PLAYGROUND_READY` with the file path to: design-explorer.
 

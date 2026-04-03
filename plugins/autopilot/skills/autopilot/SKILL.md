@@ -60,6 +60,18 @@ digraph gate {
 - **NEEDS_CLARIFICATION**: Store the assumptions from TICKET_ANALYSIS in `OPEN_ASSUMPTIONS`. Proceed to Phase 1 but include assumptions in the PR description.
 - **INSUFFICIENT**: Abort the pipeline. Report what's missing. If source is a GitHub issue, post a comment listing the missing information.
 
+### 0.4 Bootstrap Temp Directory
+
+Create the project-local temp directory for working artifacts (ignored by git):
+
+```
+mkdir -p .tmp
+```
+
+```
+echo '*' > .tmp/.gitignore
+```
+
 ## Phase 1: DISCOVERY (parallel, 3 agents)
 
 ### 1.1 Setup Workspace
@@ -129,6 +141,57 @@ Wait for all 3 agents to complete. Collect:
 - `REQUIREMENTS_DOC` from product-owner
 - `DOMAIN_VALIDATION` from domain-expert
 
+## Phase 1.5: BUG REPRODUCTION (conditional, 1 agent)
+
+Reproduces the reported bug in a real browser before any code changes. Captures baseline evidence for before/after comparison during verification.
+
+### 1.5.0 Activation Check
+
+Activate when: `ISSUE_CLASSIFICATION.type == "bug"` AND the issue describes user-facing symptoms (UI glitches, broken pages, API errors visible to users, incorrect data display).
+Skip for: features, refactors, docs, infra-only changes, or bugs with no user-facing reproduction path (e.g., data corruption, background job failures).
+
+If skipped, proceed directly to Phase 2.
+
+### 1.5.1 Service Startup
+
+Same port management logic as Phase 6.1. Start development services if not already running. Store `QA_BASE_URL`.
+
+Services started here remain running for reuse in Phase 6 — do NOT shut them down between phases.
+
+### 1.5.2 Spawn Bug Reproducer
+
+**bug-reproducer** receives:
+
+- QA_BASE_URL
+- SOURCE_ID
+- TASK_DATA (full ticket body + comments + media analysis)
+- ISSUE_CLASSIFICATION
+
+The agent:
+
+1. Parses reproduction steps from the ticket data
+2. Navigates to the app and follows the reproduction steps
+3. Captures baseline screenshots, console errors, and network failures
+4. Produces BUG_BASELINE artifact with: status, reproduction steps, evidence, and verification criteria
+
+### 1.5.3 Gate
+
+```dot
+digraph gate {
+  "Check BUG_BASELINE.status" [shape=box];
+  "REPRODUCED?" [shape=diamond];
+  "Store BUG_BASELINE, proceed to Phase 2" [shape=box];
+  "Abort pipeline" [shape=box];
+
+  "Check BUG_BASELINE.status" -> "REPRODUCED?";
+  "REPRODUCED?" -> "Store BUG_BASELINE, proceed to Phase 2" [label="yes"];
+  "REPRODUCED?" -> "Abort pipeline" [label="NOT_REPRODUCED"];
+}
+```
+
+- **REPRODUCED**: Store BUG_BASELINE. Proceed to Phase 2.
+- **NOT_REPRODUCED**: Abort the pipeline. Report to user that the bug could not be reproduced in the local environment. If source is a GitHub issue, post a comment. If Jira, note in the ticket.
+
 ## Phase 2: BRAINSTORM (multi-round, agents answer each other's questions)
 
 Applies the brainstorming skill principles autonomously — agents ask questions and other agents answer them, eliminating the need for human input.
@@ -137,7 +200,7 @@ Applies the brainstorming skill principles autonomously — agents ask questions
 
 The orchestrator acts as brainstorm facilitator. It:
 
-1. Presents the REQUIREMENTS_DOC and ISSUE_CLASSIFICATION to all design agents
+1. Presents the REQUIREMENTS_DOC and ISSUE_CLASSIFICATION to all design agents. If BUG_BASELINE is available, include the reproduction evidence and verified symptoms.
 2. Each design agent generates clarifying questions about its domain
 3. Questions are routed to the agent best positioned to answer:
    - Product/scope questions → product-owner answers
@@ -207,6 +270,9 @@ ISSUE_CLASSIFICATION:
 
 APPROACH_DECISION:
 {selected approach from brainstorm}
+
+BUG_BASELINE (if available):
+{reproduction evidence and verified symptoms from Phase 1.5}
 ```
 
 **solutions-architect** → produces DESIGN_SPEC + TASK_LIST
@@ -266,7 +332,7 @@ If skipped, frontend-developer receives UI_SPEC directly (existing behavior).
 - UI_SPEC from ui-designer
 - REQUIREMENTS_DOC from product-owner
 - ISSUE_CLASSIFICATION from issue-analyst
-- Instruction to write file to: `/tmp/design-playground-$ISSUE_NUMBER.html`
+- Instruction to write file to: `.tmp/design-playground-$ISSUE_NUMBER.html`
 
 The agent:
 
@@ -276,7 +342,7 @@ The agent:
    - 3-5 named presets + individual controls for fine-tuning
    - Preview renders the ACTUAL component/page from UI_SPEC with realistic sample data
    - Prompt output generates natural language implementation instructions
-3. Writes file to `/tmp/design-playground-$ISSUE_NUMBER.html`
+3. Writes file to `.tmp/design-playground-$ISSUE_NUMBER.html`
 4. Sends `DESIGN_PLAYGROUND_READY` (with file path) to design-explorer
 
 ### 3.5.2 Spawn Design Explorer
@@ -320,7 +386,7 @@ If design exploration failed entirely (builder error, unrecoverable issues):
 fallback: frontend-developer receives UI_SPEC + frontend-design skill principles (original behavior)
 add note to PR description: "Design exploration failed, used text-based design guidance"
 
-Clean up: `rm -f /tmp/design-playground-$ISSUE_NUMBER.html`
+Clean up: `rm -f .tmp/design-playground-$ISSUE_NUMBER.html`
 
 ## Phase 4: IMPLEMENTATION (parallel where independent, 1-4 agents)
 
@@ -348,6 +414,8 @@ Pass each implementer the relevant specs:
 **integration-developer** receives: DESIGN_SPEC (spawned after frontend + backend complete)
 
 When DESIGN_PROMPT is available (Phase 3.5 ran), pass it as the primary visual guide — it contains specific Tailwind classes, design decisions, and implementation instructions that were visually validated in a rendered playground. When DESIGN_PROMPT is NOT available (Phase 3.5 skipped), inject the frontend-design skill principles instead.
+
+If BUG_BASELINE is available (bug fix), pass it to all implementers for context on the exact symptoms and reproduction steps.
 
 ### 4.3 Gate
 
@@ -398,7 +466,7 @@ Real browser testing via Playwright MCP tools. Verifies the feature works end-to
 
 Before spawning the QA agent, the orchestrator MUST ensure all required development services are running. Multiple autopilot instances may run in parallel, so ports may be occupied.
 
-Start the project's development servers as documented in its README or CLAUDE.md. Check for required services (web app, API, payment webhooks) and start them with appropriate port management.
+If Phase 1.5 already started services (bug reproduction), reuse the existing `QA_BASE_URL` and skip startup. Otherwise, start the project's development servers as documented in its README or CLAUDE.md. Check for required services (web app, API, payment webhooks) and start them with appropriate port management.
 
 **Port Management:**
 
@@ -423,6 +491,7 @@ Skipped ONLY for pure refactoring, infrastructure, or CI-only changes.
 - REQUIREMENTS_DOC from product-owner (acceptance criteria to verify in browser)
 - UI_SPEC from ui-designer (expected visual behavior)
 - DESIGN_SCREENSHOTS paths (from design-explorer, if available) — for design fidelity comparison
+- BUG_BASELINE from bug-reproducer (if available — for before/after verification)
 - List of all modified files
 - ISSUE_CLASSIFICATION (to understand what areas to test)
 
@@ -440,20 +509,32 @@ The agent:
    - Reports design deviations as `QA_FAILURE` with type `design-fidelity` — includes specific differences and reference screenshot paths
 7. Produces a QA_REPORT with PASS/FAIL per scenario and bug list
 
-### 6.3 Feedback Loop (max 3 iterations)
+### 6.3 Feedback Loop (max 3 iterations, with revert-on-failure)
 
 ```
 iteration = 0
 while manual-qa-tester reports QA_FAILURE and iteration < 3:
-    collect QA_FAILURE messages with bug details
-    group bugs by responsible implementer (frontend/backend/integration)
-    re-spawn relevant implementer(s) with:
-      - specific bug description
-      - screenshot evidence path
-      - console errors and network failures
-      - expected vs actual behavior
-    wait for implementer fixes
-    re-spawn manual-qa-tester for re-test of failed scenarios only
+    if iteration == 2:
+        # Approach is fundamentally wrong — revert and re-architect
+        revert all implementation changes (git checkout on modified files)
+        re-spawn solutions-architect with:
+          - original REQUIREMENTS_DOC
+          - all QA_FAILURE evidence from iterations 0-1
+          - BUG_BASELINE (if available)
+          - instruction: "Previous approach failed QA twice. Re-investigate and propose a different solution."
+        wait for new DESIGN_SPEC
+        re-spawn implementer(s) with new DESIGN_SPEC
+        re-spawn manual-qa-tester for full re-test
+    else:
+        collect QA_FAILURE messages with bug details
+        group bugs by responsible implementer (frontend/backend/integration)
+        re-spawn relevant implementer(s) with:
+          - specific bug description
+          - screenshot evidence path
+          - console errors and network failures
+          - expected vs actual behavior
+        wait for implementer fixes
+        re-spawn manual-qa-tester for re-test of failed scenarios only
     iteration += 1
 
 if iteration == 3 and still failing:
@@ -599,6 +680,8 @@ Report PR URL to user.
 | Agent spawn fails         | Retry once, then orchestrator handles that role inline |
 | Worktree creation fails   | Abort with clear error message                         |
 | All implementers fail     | Abort, delete worktree, report what was learned        |
+| Bug not reproducible      | Abort pipeline, report to user or comment on issue     |
+| Service unavailable (QA)  | Retry startup once, then abort with clear error        |
 | Verification fails 2x    | Create PR anyway with failures documented              |
 | `gh pr create` fails      | Push branch, report URL for manual PR creation         |
 
@@ -627,6 +710,7 @@ Report PR URL to user.
 | accessibility-tester      | sonnet | Checklist verification                  |
 | spec-compliance-verifier  | opus   | Reasoning about coverage                |
 | code-quality-reviewer     | opus   | Quality judgment                        |
+| bug-reproducer            | opus   | Complex browser interaction & reproduction judgment |
 | manual-qa-tester          | opus   | Complex browser interaction & judgment  |
 | design-playground-builder | opus   | Creative HTML playground generation     |
 | design-explorer           | opus   | Visual judgment via browser interaction |
