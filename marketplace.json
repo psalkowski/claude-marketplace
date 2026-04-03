@@ -1,0 +1,14 @@
+{
+  "name": "Piotr's Claude Marketplace",
+  "plugins": [
+    {
+      "name": "autopilot",
+      "version": "1.0.0",
+      "source": {
+        "type": "github",
+        "repo": "psalkowski/claude-marketplace",
+        "directory": "plugins/autopilot"
+      }
+    }
+  ]
+}
