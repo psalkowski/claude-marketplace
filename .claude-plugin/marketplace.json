@@ -1,14 +1,14 @@
 {
-  "name": "Piotr's Claude Marketplace",
+  "name": "piotrs-claude-marketplace",
+  "owner": {
+    "name": "Piotr Salkowski"
+  },
   "plugins": [
     {
       "name": "autopilot",
+      "description": "Fully autonomous issue-to-PR workflow with 23 specialized agents across 9 phases",
       "version": "1.0.0",
-      "source": {
-        "type": "github",
-        "repo": "psalkowski/claude-marketplace",
-        "directory": "plugins/autopilot"
-      }
+      "source": "./plugins/autopilot"
     }
   ]
 }
