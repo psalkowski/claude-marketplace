@@ -8,6 +8,16 @@ argument-hint: <github-url | jira-url | ticket-id | prompt>
 
 Fully autonomous workflow. No questions. No human intervention. Pass anything — an issue, a ticket, a prompt — get a PR.
 
+## MANDATORY: Pipeline Tracking
+
+You MUST create a task using TaskCreate before starting Phase 0:
+
+- **Subject:** "Phase 0: Ticket Analysis"
+- **Description:** "Analyze input, fetch ticket data, analyze attachments, explore codebase, assess sufficiency"
+
+Do NOT proceed until this task exists. Mark it `in_progress` immediately.
+Remaining phase tasks will be created after Phase 0 completes (see Phase 0.5).
+
 ## Phase 0: TICKET ANALYSIS
 
 Delegate to the `ticket-analyzer` skill to fetch, analyze, and assess the input before proceeding.
@@ -35,6 +45,8 @@ From the TICKET_ANALYSIS, extract and store:
 - `TICKET_LANGUAGE` — detected language code
 - `VERDICT` — SUFFICIENT, NEEDS_CLARIFICATION, or INSUFFICIENT
 
+**Language rule:** All pipeline communication, analysis, and user-facing output stays in the conversation's initial language (typically English). `TICKET_LANGUAGE` is ONLY used when composing text that will be posted to the ticket or sent to the team (GitHub/Jira comments, clarification requests). Those external messages must match the ticket's language.
+
 For GitHub issues, also store `ISSUE_NUMBER`. Use `--repo $REPO_SLUG` in all `gh` commands.
 
 ### 0.3 Gate
@@ -58,25 +70,60 @@ digraph gate {
 
 - **SUFFICIENT**: Proceed to Phase 1 with full TASK_DATA.
 - **NEEDS_CLARIFICATION**: Store the assumptions from TICKET_ANALYSIS in `OPEN_ASSUMPTIONS`. Proceed to Phase 1 but include assumptions in the PR description.
-- **INSUFFICIENT**: Abort the pipeline. Report what's missing. If source is a GitHub issue, post a comment listing the missing information.
+- **INSUFFICIENT**: Abort the pipeline. Report what's missing. If source is a GitHub issue or Jira ticket, post a comment listing the missing information — write the comment in `TICKET_LANGUAGE` so the team can read it.
 
 ### 0.4 Bootstrap Temp Directory
 
-Create the project-local temp directory for working artifacts (ignored by git):
+Create the project-local temp directory with a `SOURCE_ID`-based subdirectory for this run's working artifacts:
 
 ```
-mkdir -p .tmp
+mkdir -p .tmp/autopilot-$SOURCE_ID
 ```
 
 ```
 echo '*' > .tmp/.gitignore
 ```
 
+All temporary files for this pipeline run go under `.tmp/autopilot-$SOURCE_ID/` — never flat in `.tmp/`.
+
+### 0.5 Create Pipeline Checklist
+
+Mark the Phase 0 task as `completed`. Then use TaskCreate to create one task for EACH remaining phase. This is MANDATORY — every task must exist before proceeding.
+
+**Always create:**
+| Task Subject | Description |
+|---|---|
+| Phase 1: Discovery | Classify issue, gather requirements, validate business rules (3 parallel agents) |
+| Phase 2: Brainstorm | Agents ask/answer clarifying questions, select implementation approach |
+| Phase 3: Design | Produce architecture, UI, API, security specs (2-5 parallel agents) |
+| Phase 4: Implementation | Write production code (1-4 agents based on scope) |
+| Phase 5: Testing | Write and run unit, integration, E2E, accessibility tests |
+| Phase 6: Manual QA | Browser-based testing via Playwright MCP tools |
+| Phase 7: Review | Spec compliance, code quality, convention enforcement |
+| Phase 8: Ship | Commit, push, create PR |
+
+**Conditionally create:**
+- If `ISSUE_CLASSIFICATION.type == "bug"` AND user-facing symptoms: **"Phase 1.5: Bug Reproduction"** — "Reproduce bug in browser before code changes, capture baseline evidence"
+- If `ISSUE_CLASSIFICATION.areas` includes `frontend`: **"Phase 3.5: Design Exploration"** — "Create HTML playground, evaluate designs in browser, extract winning design"
+
+**Rule:** Mark each task `in_progress` when you start the phase. Mark it `completed` when the phase gate passes. Do NOT skip any task — if a phase is not applicable, mark it completed with a note explaining why.
+
 ## Phase 1: DISCOVERY (parallel, 3 agents)
 
 ### 1.1 Setup Workspace
 
-Create isolated worktree via `EnterWorktree` with name derived from task: `autopilot-$SOURCE_ID`.
+Check the project's CLAUDE.md for worktree restrictions (phrases like "no worktree", "do not create worktree", "worktrees forbidden", "never use EnterWorktree").
+
+**If worktrees are allowed (default):**
+Create isolated worktree via `EnterWorktree` with name: `autopilot-$SOURCE_ID`.
+If `EnterWorktree` fails for any reason, fall back to branch mode below.
+Store `WORKSPACE_MODE = "worktree"`.
+
+**If worktrees are forbidden or failed:**
+Create a branch:
+`git checkout -b claude/autopilot-$SOURCE_ID`
+If the branch already exists: `git checkout claude/autopilot-$SOURCE_ID`
+Store `WORKSPACE_MODE = "branch"`.
 
 Where `SOURCE_ID` is:
 - GitHub: the issue number (e.g., `251`)
@@ -190,7 +237,7 @@ digraph gate {
 ```
 
 - **REPRODUCED**: Store BUG_BASELINE. Proceed to Phase 2.
-- **NOT_REPRODUCED**: Abort the pipeline. Report to user that the bug could not be reproduced in the local environment. If source is a GitHub issue, post a comment. If Jira, note in the ticket.
+- **NOT_REPRODUCED**: Abort the pipeline. Report to user that the bug could not be reproduced in the local environment. If source is a GitHub issue or Jira ticket, post a comment (in `TICKET_LANGUAGE`) explaining the reproduction attempt and failure.
 
 ## Phase 2: BRAINSTORM (multi-round, agents answer each other's questions)
 
@@ -332,7 +379,7 @@ If skipped, frontend-developer receives UI_SPEC directly (existing behavior).
 - UI_SPEC from ui-designer
 - REQUIREMENTS_DOC from product-owner
 - ISSUE_CLASSIFICATION from issue-analyst
-- Instruction to write file to: `.tmp/design-playground-$ISSUE_NUMBER.html`
+- Instruction to write file to: `.tmp/autopilot-$SOURCE_ID/design-playground.html`
 
 The agent:
 
@@ -342,7 +389,7 @@ The agent:
    - 3-5 named presets + individual controls for fine-tuning
    - Preview renders the ACTUAL component/page from UI_SPEC with realistic sample data
    - Prompt output generates natural language implementation instructions
-3. Writes file to `.tmp/design-playground-$ISSUE_NUMBER.html`
+3. Writes file to `.tmp/autopilot-$SOURCE_ID/design-playground.html`
 4. Sends `DESIGN_PLAYGROUND_READY` (with file path) to design-explorer
 
 ### 3.5.2 Spawn Design Explorer
@@ -386,7 +433,7 @@ If design exploration failed entirely (builder error, unrecoverable issues):
 fallback: frontend-developer receives UI_SPEC + frontend-design skill principles (original behavior)
 add note to PR description: "Design exploration failed, used text-based design guidance"
 
-Clean up: `rm -f .tmp/design-playground-$ISSUE_NUMBER.html`
+Clean up: `rm -f .tmp/autopilot-$SOURCE_ID/design-playground.html`
 
 ## Phase 4: IMPLEMENTATION (parallel where independent, 1-4 agents)
 
@@ -664,6 +711,10 @@ Copy labels from the original issue/ticket (if available). Add extra labels base
 
 ### 8.5 Cleanup
 
+**Workspace cleanup:**
+- If `WORKSPACE_MODE == "worktree"`: Use `ExitWorktree` to merge changes and clean up.
+- If `WORKSPACE_MODE == "branch"`: No workspace cleanup needed (branch was pushed in 8.2).
+
 Use `TeamDelete` to clean up the team.
 Report PR URL to user.
 
@@ -678,8 +729,8 @@ Report PR URL to user.
 | ffmpeg not available       | Skip video frame extraction, note limitation, proceed  |
 | Sufficiency check fails   | Abort with report of what's missing                    |
 | Agent spawn fails         | Retry once, then orchestrator handles that role inline |
-| Worktree creation fails   | Abort with clear error message                         |
-| All implementers fail     | Abort, delete worktree, report what was learned        |
+| Worktree creation fails   | Fall back to branch mode (git checkout -b), continue pipeline |
+| All implementers fail     | Abort, clean up workspace (worktree or branch), report what was learned |
 | Bug not reproducible      | Abort pipeline, report to user or comment on issue     |
 | Service unavailable (QA)  | Retry startup once, then abort with clear error        |
 | Verification fails 2x    | Create PR anyway with failures documented              |

@@ -12,7 +12,7 @@ tools:
   - SendMessage
 ---
 
-You are a Database Developer for the current project. You create migration files and repository functions in the worktree (isolated branch).
+You are a Database Developer for the current project. You create migration files and repository functions on the isolated branch.
 
 ## Inputs
 
