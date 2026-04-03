@@ -1,61 +1,94 @@
 ---
 name: autopilot
-description: Fully autonomous issue-to-PR workflow. Pass a GitHub issue URL or number, get a complete PR with no human intervention. Uses agent teams with 23 specialized roles across 9 phases.
-argument-hint: <github-issue-url-or-number>
+description: Use when you want to autonomously implement any task — pass a GitHub issue URL, Jira ticket URL, ticket ID, or a plain text prompt and get a complete PR with no human intervention.
+argument-hint: <github-url | jira-url | ticket-id | prompt>
 ---
 
-# Autopilot: Enterprise Issue-to-PR Pipeline
+# Autopilot: Enterprise Task-to-PR Pipeline
 
-Fully autonomous workflow. No questions. No human intervention. Pass an issue, get a PR.
+Fully autonomous workflow. No questions. No human intervention. Pass anything — an issue, a ticket, a prompt — get a PR.
 
-## Parse Input
+## Phase 0: TICKET ANALYSIS
 
-Extract issue number from `$ARGUMENTS`:
+Delegate to the `ticket-analyzer` skill to fetch, analyze, and assess the input before proceeding.
 
-- URL format: `https://github.com/owner/repo/issues/251` → `251`
-- Number format: `251` or `#251` → `251`
+### 0.1 Run Ticket Analyzer
 
-Store as `ISSUE_NUMBER`.
+Invoke the `ticket-analyzer` skill with the raw `$ARGUMENTS`. The ticket-analyzer handles ALL of:
+- Input type detection (GitHub, Jira, raw prompt)
+- Data fetching (gh, acli jira)
+- Attachment analysis (images, videos with frame extraction + whisper transcription)
+- Codebase exploration (finding affected files, related logic, existing patterns)
+- Language detection
+- Sufficiency assessment
 
-## Detect Repository
+Store the full `TICKET_ANALYSIS` output.
 
-Run: `git remote get-url origin`
+### 0.2 Extract Key Fields
 
-Parse the output to extract `OWNER/REPO`:
-- SSH format: `git@github.com:owner/repo.git` → `owner/repo`
-- HTTPS format: `https://github.com/owner/repo.git` → `owner/repo`
+From the TICKET_ANALYSIS, extract and store:
+- `SOURCE_TYPE` — github-issue, jira-ticket, or prompt
+- `SOURCE_ID` — issue number, ticket ID, or slug
+- `SOURCE_URL` — original URL if any
+- `REPO_SLUG` — owner/repo (from ticket-analyzer or detect from `git remote get-url origin`)
+- `TASK_DATA` — full ticket body + comments + media analysis + transcription + codebase context
+- `TICKET_LANGUAGE` — detected language code
+- `VERDICT` — SUFFICIENT, NEEDS_CLARIFICATION, or INSUFFICIENT
 
-Strip trailing `.git` if present. Store as `REPO_SLUG`.
+For GitHub issues, also store `ISSUE_NUMBER`. Use `--repo $REPO_SLUG` in all `gh` commands.
 
-Use `--repo $REPO_SLUG` in all `gh` commands throughout this pipeline.
+### 0.3 Gate
+
+```dot
+digraph gate {
+  "Check VERDICT" [shape=box];
+  "SUFFICIENT?" [shape=diamond];
+  "NEEDS_CLARIFICATION?" [shape=diamond];
+  "Proceed to Phase 1" [shape=box];
+  "Document ASSUMPTIONS and proceed" [shape=box];
+  "Abort with report" [shape=box];
+
+  "Check VERDICT" -> "SUFFICIENT?";
+  "SUFFICIENT?" -> "Proceed to Phase 1" [label="yes"];
+  "SUFFICIENT?" -> "NEEDS_CLARIFICATION?" [label="no"];
+  "NEEDS_CLARIFICATION?" -> "Document ASSUMPTIONS and proceed" [label="yes"];
+  "NEEDS_CLARIFICATION?" -> "Abort with report" [label="INSUFFICIENT"];
+}
+```
+
+- **SUFFICIENT**: Proceed to Phase 1 with full TASK_DATA.
+- **NEEDS_CLARIFICATION**: Store the assumptions from TICKET_ANALYSIS in `OPEN_ASSUMPTIONS`. Proceed to Phase 1 but include assumptions in the PR description.
+- **INSUFFICIENT**: Abort the pipeline. Report what's missing. If source is a GitHub issue, post a comment listing the missing information.
 
 ## Phase 1: DISCOVERY (parallel, 3 agents)
 
-### 1.1 Fetch Issue
+### 1.1 Setup Workspace
 
-Run: `gh issue view $ISSUE_NUMBER --repo $REPO_SLUG --json title,body,labels,milestone,assignees,comments`
+Create isolated worktree via `EnterWorktree` with name derived from task: `autopilot-$SOURCE_ID`.
 
-Store the full output as `ISSUE_DATA`.
+Where `SOURCE_ID` is:
+- GitHub: the issue number (e.g., `251`)
+- Jira: the ticket ID (e.g., `PROJ-456`)
+- Prompt: a slug from the first few words (e.g., `add-dark-mode-toggle`)
 
-### 1.2 Setup Workspace
+### 1.2 Create Team
 
-Create isolated worktree via `EnterWorktree` with name derived from issue: `autopilot-$ISSUE_NUMBER`.
+Use `TeamCreate` with name `autopilot-$SOURCE_ID`.
 
-### 1.3 Create Team
-
-Use `TeamCreate` with name `autopilot-$ISSUE_NUMBER`.
-
-### 1.4 Spawn Discovery Agents (parallel)
+### 1.3 Spawn Discovery Agents (parallel)
 
 Spawn 3 agents simultaneously using the Agent tool:
 
 **Agent 1: issue-analyst**
 
 ```
-Analyze this GitHub issue and produce a structured classification.
+Analyze this task and produce a structured classification.
 
-ISSUE DATA:
-{ISSUE_DATA}
+TASK DATA:
+{TASK_DATA}
+
+MEDIA ANALYSIS (if available):
+{MEDIA_ANALYSIS}
 
 Send ISSUE_CLASSIFICATION via SendMessage to: product-owner, domain-expert
 ```
@@ -65,8 +98,11 @@ Send ISSUE_CLASSIFICATION via SendMessage to: product-owner, domain-expert
 ```
 Wait for ISSUE_CLASSIFICATION from issue-analyst, then produce REQUIREMENTS_DOC.
 
-ISSUE DATA:
-{ISSUE_DATA}
+TASK DATA:
+{TASK_DATA}
+
+MEDIA ANALYSIS (if available):
+{MEDIA_ANALYSIS}
 
 Send REQUIREMENTS_DOC via SendMessage to: solutions-architect, ui-designer, api-designer, security-analyst
 ```
@@ -76,13 +112,16 @@ Send REQUIREMENTS_DOC via SendMessage to: solutions-architect, ui-designer, api-
 ```
 Wait for ISSUE_CLASSIFICATION from issue-analyst, then validate against business rules.
 
-ISSUE DATA:
-{ISSUE_DATA}
+TASK DATA:
+{TASK_DATA}
+
+MEDIA ANALYSIS (if available):
+{MEDIA_ANALYSIS}
 
 Send DOMAIN_VALIDATION via SendMessage to: product-owner, solutions-architect
 ```
 
-### 1.5 Gate
+### 1.4 Gate
 
 Wait for all 3 agents to complete. Collect:
 
@@ -474,7 +513,7 @@ Stage all modified files (explicit paths, not `git add -A`).
 Commit with message format:
 
 ```
-feat: <short description from PO requirements> #$ISSUE_NUMBER
+feat: <short description from PO requirements> #$SOURCE_ID
 ```
 
 Use appropriate prefix: `feat:`, `fix:`, `refactor:`, `docs:` based on issue classification.
@@ -482,7 +521,7 @@ Use appropriate prefix: `feat:`, `fix:`, `refactor:`, `docs:` based on issue cla
 ### 8.2 Push Branch
 
 ```
-git push -u origin claude/autopilot-$ISSUE_NUMBER
+git push -u origin claude/autopilot-$SOURCE_ID
 ```
 
 ### 8.3 Create PR
@@ -490,9 +529,13 @@ git push -u origin claude/autopilot-$ISSUE_NUMBER
 Use `gh pr create` with this template:
 
 ```
-gh pr create --repo $REPO_SLUG --title "<type>: <short description> #$ISSUE_NUMBER" --body "$(cat <<'EOF'
+gh pr create --repo $REPO_SLUG --title "<type>: <short description> #$SOURCE_ID" --body "$(cat <<'EOF'
 ## Summary
 {product-owner's requirements summary}
+
+## Source
+{source_type}: {source_url or source_id}
+{If assumptions were made due to sparse input, list them under "Assumptions"}
 
 ## Acceptance Criteria
 {spec-compliance-verifier's checklist with ✅/❌ per criterion}
@@ -514,21 +557,24 @@ gh pr create --repo $REPO_SLUG --title "<type>: <short description> #$ISSUE_NUMB
 
 ## Manual QA Results
 {manual-qa-tester's QA_REPORT summary: scenarios passed/failed, bugs found}
-{Link to full QA report: docs/qa/{date}-autopilot-{issue-number}.md}
+{Link to full QA report: docs/qa/{date}-autopilot-{source_id}.md}
 
 ## Verify Output
 {convention-enforcer's verification result: PASS or summary of issues}
 
 {labels_note}
 
-Closes #$ISSUE_NUMBER
+{If source_type is github-issue: "Closes #$ISSUE_NUMBER"}
+{If source_type is jira-ticket: "Jira: $TICKET_ID"}
 EOF
 )"
 ```
 
+Note: If `REPO_SLUG` is not available (e.g., raw prompt input without a GitHub remote), detect it from `git remote get-url origin` before creating the PR.
+
 ### 8.4 Add Labels
 
-Copy labels from the original issue. Add extra labels based on pipeline result:
+Copy labels from the original issue/ticket (if available). Add extra labels based on pipeline result:
 
 - `autopilot` (always)
 - `tests-need-attention` (if automated test circuit breaker triggered)
@@ -544,7 +590,12 @@ Report PR URL to user.
 
 | Error                     | Recovery                                               |
 | ------------------------- | ------------------------------------------------------ |
+| Input cannot be resolved  | Abort with clear error message explaining what was received and what's expected |
 | `gh issue view` fails     | Abort with clear error message                         |
+| `acli jira` fails         | Try WebFetch on URL, then abort if still fails         |
+| Attachment download fails  | Skip attachment, note in MEDIA_ANALYSIS, proceed       |
+| ffmpeg not available       | Skip video frame extraction, note limitation, proceed  |
+| Sufficiency check fails   | Abort with report of what's missing                    |
 | Agent spawn fails         | Retry once, then orchestrator handles that role inline |
 | Worktree creation fails   | Abort with clear error message                         |
 | All implementers fail     | Abort, delete worktree, report what was learned        |
@@ -555,7 +606,9 @@ Report PR URL to user.
 
 | Agent                     | Model  | Rationale                               |
 | ------------------------- | ------ | --------------------------------------- |
-| issue-analyst             | sonnet | Mechanical parsing                      |
+| input-resolver            | sonnet | Mechanical input parsing                |
+| media-analyzer            | opus   | Visual comprehension of attachments     |
+| issue-analyst             | sonnet | Mechanical classification               |
 | product-owner             | opus   | Product reasoning                       |
 | domain-expert             | opus   | Business logic reasoning                |
 | solutions-architect       | opus   | Architecture decisions                  |
