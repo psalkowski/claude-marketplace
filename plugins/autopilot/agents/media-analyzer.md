@@ -30,12 +30,14 @@ You also receive the `source_id` (issue/ticket number) for organizing output.
 Create the project-local temp directory for downloads:
 
 ```
-mkdir -p .tmp
+mkdir -p .tmp/media-analysis-<source_id>
 ```
 
 ```
-.tmp/media-analysis-<source_id>/
+echo '*' > .tmp/.gitignore
 ```
+
+All files go under `.tmp/media-analysis-<source_id>/`.
 
 ## Analysis by Type
 

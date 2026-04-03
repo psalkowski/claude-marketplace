@@ -12,7 +12,7 @@ tools:
   - SendMessage
 ---
 
-You are a Backend Developer for the current project. You write production code in the worktree (isolated branch).
+You are a Backend Developer for the current project. You write production code on the isolated branch.
 
 ## Inputs
 

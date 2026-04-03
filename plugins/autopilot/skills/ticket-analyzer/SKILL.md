@@ -6,7 +6,7 @@ argument-hint: <ticket-url-or-id-or-description>
 
 # Ticket Analyzer
 
-Analyzes any ticket, issue, or task description — fetches data, analyzes attachments (including video transcription), explores the codebase for context, and determines whether there is enough information to begin implementation. Responds in the same language as the ticket.
+Analyzes any ticket, issue, or task description — fetches data, analyzes attachments (including video transcription), explores the codebase for context, and determines whether there is enough information to begin implementation.
 
 ## Parse Input
 
@@ -75,7 +75,9 @@ Use `$ARGUMENTS` directly as the ticket body.
 
 ## Detect Language
 
-Detect the primary language of the ticket body. All analysis output and the final report MUST be written in this language. If the ticket is in Polish, respond in Polish. If German, respond in German. Default to English only if language is undetectable.
+Detect the primary language of the ticket body. Store as `TICKET_LANGUAGE`. Default to `en` if undetectable.
+
+**Language rule:** The analysis output and all internal pipeline communication stay in English (or whatever language the user initiated the conversation in). The ticket language is ONLY used when composing text that will be posted back to the ticket or sent to the team for clarification (e.g., GitHub issue comments, Jira comments asking for missing information). Those external-facing messages must match the ticket's language so the team can read them.
 
 ## Analyze Attachments
 
@@ -96,24 +98,29 @@ GitHub attachments can typically be downloaded directly without auth.
 
 ### Videos (.mp4, .mov, .webm, Loom links)
 
-1. Ensure temp directory exists:
+1. Ensure temp directory exists (use source_id for isolation):
 ```
-mkdir -p .tmp
+mkdir -p .tmp/ticket-analysis-<source_id>
 ```
+```
+echo '*' > .tmp/.gitignore
+```
+
+Where `<source_id>` is the issue number (e.g., `251`), ticket ID (e.g., `PROJ-456`), or slug from prompt.
 
 2. Download the video:
 ```
-curl -sL -o .tmp/ticket-analysis-video.<ext> "<url>"
+curl -sL -o .tmp/ticket-analysis-<source_id>/video.<ext> "<url>"
 ```
 
 3. Get duration:
 ```
-ffprobe -v quiet -print_format json -show_format ".tmp/ticket-analysis-video.<ext>"
+ffprobe -v quiet -print_format json -show_format ".tmp/ticket-analysis-<source_id>/video.<ext>"
 ```
 
 4. Extract frames every 5 seconds:
 ```
-ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -vf "fps=1/5" -q:v 2 ".tmp/ticket-frames/frame_%04d.jpg"
+ffmpeg -i ".tmp/ticket-analysis-<source_id>/video.<ext>" -vf "fps=1/5" -q:v 2 ".tmp/ticket-analysis-<source_id>/frames/frame_%04d.jpg"
 ```
 
 5. Burn timestamps into frames for reference:
@@ -125,7 +132,7 @@ magick <frame>.jpg -font /System/Library/Fonts/Helvetica.ttc -gravity NorthWest 
 
 7. Extract subtitles if present:
 ```
-ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -map 0:s:0 ".tmp/ticket-subtitles.srt" 2>/dev/null
+ffmpeg -i ".tmp/ticket-analysis-<source_id>/video.<ext>" -map 0:s:0 ".tmp/ticket-analysis-<source_id>/subtitles.srt" 2>/dev/null
 ```
 
 8. Transcribe audio narration using whisper-cpp (local, free, no API key).
@@ -161,8 +168,8 @@ Use large-v3 if >= 16GB RAM, fall back to medium otherwise.
 
 Then transcribe:
 ```
-ffmpeg -i ".tmp/ticket-analysis-video.<ext>" -ar 16000 -ac 1 -c:a pcm_s16le ".tmp/ticket-analysis-audio.wav"
-whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f ".tmp/ticket-analysis-audio.wav" -osrt -l auto
+ffmpeg -i ".tmp/ticket-analysis-<source_id>/video.<ext>" -ar 16000 -ac 1 -c:a pcm_s16le ".tmp/ticket-analysis-<source_id>/audio.wav"
+whisper-cli -m ~/.local/share/whisper-models/ggml-large-v3.bin -f ".tmp/ticket-analysis-<source_id>/audio.wav" -osrt -l auto
 ```
 
 If large-v3 fails (out of memory), retry with medium model.
@@ -250,7 +257,7 @@ Consider what the codebase reveals. If you can identify the exact code that need
 
 ## Output: TICKET_ANALYSIS
 
-Respond in the detected ticket language. Structure:
+Structure:
 
 ```
 TICKET_ANALYSIS
@@ -307,5 +314,5 @@ confidence: <HIGH|MEDIUM|LOW>
 
 Remove any downloaded media files after analysis:
 ```
-rm -rf .tmp/ticket-analysis-video.* .tmp/ticket-frames/ .tmp/ticket-subtitles.srt .tmp/ticket-analysis-audio.wav
+rm -rf .tmp/ticket-analysis-<source_id>/
 ```

@@ -1,4 +1,4 @@
-# Autopilot v2.1.0
+# Autopilot v2.2.0
 
 Fully autonomous task-to-PR workflow. Pass a GitHub issue, Jira ticket, or plain text prompt — get a complete PR with no human intervention.
 

@@ -12,7 +12,7 @@ tools:
   - SendMessage
 ---
 
-You are an Integration Developer for the current project. You handle cross-service wiring in the worktree (isolated branch).
+You are an Integration Developer for the current project. You handle cross-service wiring on the isolated branch.
 
 ## Inputs
 

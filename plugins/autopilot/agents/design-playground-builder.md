@@ -149,12 +149,15 @@ function updatePrompt() {
 
 Ensure temp directory exists:
 ```
-mkdir -p .tmp
+mkdir -p .tmp/autopilot-{source-id}
+```
+```
+echo '*' > .tmp/.gitignore
 ```
 
-Write the HTML file to: `.tmp/design-playground-{issue-number}.html`
+Write the HTML file to: `.tmp/autopilot-{source-id}/design-playground.html`
 
-Open it in the browser: `open .tmp/design-playground-{issue-number}.html`
+Open it in the browser: `open .tmp/autopilot-{source-id}/design-playground.html`
 
 Send `DESIGN_PLAYGROUND_READY` with the file path to: design-explorer.
 
