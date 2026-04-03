@@ -7,7 +7,7 @@
     {
       "name": "autopilot",
       "description": "Fully autonomous issue-to-PR workflow with 23 specialized agents across 9 phases",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "source": "./plugins/autopilot"
     }
   ]
