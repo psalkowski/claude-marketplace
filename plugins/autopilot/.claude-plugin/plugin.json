@@ -1,7 +1,7 @@
 {
   "name": "autopilot",
-  "description": "Fully autonomous issue-to-PR workflow with 23 specialized agents across 9 phases",
-  "version": "1.0.0",
+  "description": "Fully autonomous task-to-PR workflow accepting any input (GitHub issues, Jira tickets, prompts) with 25 specialized agents across 10 phases, plus standalone ticket analysis",
+  "version": "2.0.0",
   "author": {
     "name": "Piotr Salkowski"
   }
