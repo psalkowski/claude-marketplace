@@ -106,7 +106,7 @@ Mark the Phase 0 task as `completed`. Then use TaskCreate to create one task for
 - If `ISSUE_CLASSIFICATION.type == "bug"` AND user-facing symptoms: **"Phase 1.5: Bug Reproduction"** — "Reproduce bug in browser before code changes, capture baseline evidence"
 - If `ISSUE_CLASSIFICATION.areas` includes `frontend`: **"Phase 3.5: Design Exploration"** — "Create HTML playground, evaluate designs in browser, extract winning design"
 
-**Rule:** Mark each task `in_progress` when you start the phase. Mark it `completed` when the phase gate passes. Do NOT skip any task — if a phase is not applicable, mark it completed with a note explaining why.
+**Rule:** Mark each task `in_progress` when you start the phase. Mark it `completed` when the phase gate passes. Do NOT skip any task — if a phase is not applicable, mark it completed with a note explaining why. **Phases 6 (Manual QA) and 7 (Review) are MANDATORY for features and bugs with UI — they are never "not applicable" for these types.**
 
 ## Phase 1: DISCOVERY (parallel, 3 agents)
 
@@ -505,9 +505,21 @@ if iteration == 3 and still failing:
 
 All test writers report TEST_PASS, or circuit breaker triggered.
 
-## Phase 6: MANUAL QA (1 agent, browser-based)
+**Proceed to Phase 6: Manual QA.** Do NOT skip to Phase 8.
+
+## Phase 6: MANUAL QA (1 agent, browser-based) — MANDATORY for features
 
 Real browser testing via Playwright MCP tools. Verifies the feature works end-to-end as a real user would experience it — not just passing tests, but actually functional in the browser.
+
+**This phase is MANDATORY.** Passing automated tests does NOT mean the feature works in the browser. If you are thinking about skipping this phase, STOP — you are rationalizing.
+
+| Excuse | Reality |
+|--------|---------|
+| "Tests pass, so it works" | Tests verify code paths. QA verifies the user experience. Different things. |
+| "It's too late / context is long" | Shipping untested UI is worse than a long context. |
+| "I'll do QA after shipping" | QA after shipping = broken PR. Do it now. |
+| "This is a simple change" | Simple changes break UIs. That's why QA exists. |
+| "I can skip to Phase 8" | Phase 8 requires all prior phases completed. You cannot. |
 
 ### 6.1 Service Startup & Port Management
 
@@ -529,8 +541,8 @@ Wait for all services to be ready by polling their health endpoints. Store the b
 
 ### 6.2 Spawn Manual QA Tester
 
-Activated when the issue has ANY user-facing changes (frontend, API responses visible to users, billing flows).
-Skipped ONLY for pure refactoring, infrastructure, or CI-only changes.
+**MANDATORY** when the issue has ANY user-facing changes (frontend, API responses visible to users, billing flows). This includes ALL features and ALL bugs with UI.
+Skipped ONLY for pure refactoring, infrastructure, or CI-only changes — and when skipped, you MUST mark the Phase 6 task as completed with a note explaining why.
 
 **manual-qa-tester** receives:
 
@@ -593,6 +605,8 @@ if iteration == 3 and still failing:
 
 manual-qa-tester reports QA_APPROVED, or circuit breaker triggered.
 
+**Proceed to Phase 7: Review.** Do NOT skip to Phase 8.
+
 ### 6.5 QA Report Artifact
 
 Save the full QA report to `docs/qa/{date}-autopilot-{issue-number}.md` for the project record.
@@ -601,7 +615,7 @@ Save the full QA report to `docs/qa/{date}-autopilot-{issue-number}.md` for the 
 
 After QA completes (pass or fail), kill the services started in 6.1 using the stored port numbers.
 
-## Phase 7: REVIEW (parallel, 3 agents)
+## Phase 7: REVIEW (parallel, 3 agents) — MANDATORY
 
 ### 7.1 Spawn All Review Agents (parallel)
 
@@ -632,7 +646,28 @@ if iteration == 3 and still failing:
 
 All reviewers approve, or circuit breaker triggered.
 
+**Proceed to Phase 8: Ship.**
+
 ## Phase 8: SHIP
+
+### 8.0 Phase Completion Verification — MANDATORY
+
+Before ANY shipping actions, verify that ALL prior phases have been completed. Use TaskGet to check every phase task status.
+
+```
+REQUIRED completed phases:
+- Phase 1: Discovery ✓
+- Phase 2: Brainstorm ✓
+- Phase 3: Design ✓
+- Phase 4: Implementation ✓
+- Phase 5: Testing ✓
+- Phase 6: Manual QA ✓ (or marked completed with skip justification)
+- Phase 7: Review ✓
+```
+
+**If ANY phase is not completed:** STOP. Go back and complete it. Do NOT proceed with shipping.
+
+**If Phase 6 was skipped for a feature or bug with UI:** STOP. Go back to Phase 6. Automated tests passing is NOT a substitute for Manual QA.
 
 ### 8.1 Commit All Changes
 
