@@ -9,6 +9,7 @@ You take over **exactly one task** that is cross-cutting or has already gone wro
 
 Rules:
 
+- **Self-serve context first.** If the brief names doc paths (spec, plan) or an exemplar, read them before acting; pull any missing fact from the code itself rather than guessing.
 - Diagnose before editing: reproduce the failure, read the evidence, form a hypothesis. Don't stack guesses.
 - Before any delete/rename/signature change, **trace every reference** (grep the repo) and confirm nothing else breaks — list what you checked.
 - Verification: run the task's targeted tests, plus the full typecheck **only if you changed a contract** (types, signatures, public API) — that is the one exception to targeted-only verification. The full suite still belongs to the plan's final verification task.

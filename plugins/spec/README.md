@@ -1,4 +1,4 @@
-# spec (v0.3.0)
+# spec (v0.4.0)
 
 Provider-agnostic spec workflow for Claude Code. **`spec:plan` is the single front door** for feature work: it brainstorms (one-question-at-a-time), grills terminology against the project glossary, writes a durable **spec**, and then *decides* — based on the size of the work — whether a lean plan doc is needed and which execution mode to use (same-session by default). `spec:execute` runs handed-off plans in a fresh session through pinned subagents.
 
@@ -10,16 +10,19 @@ Self-contained — no superpowers dependency. Storage-agnostic: all docs are rea
 |---|---|---|
 | skill | `spec:plan` | front door: understand → grill (`grill-with-docs`) → (design skill) → **spec** in the Docs Root → optional lean plan doc → execution-mode decision |
 | skill | `spec:execute` | fresh-session plan runner: pinned subagents, per-task review gates, escalation-only routing |
-| agent | `spec:plan-executor` | Fable, `high` — default executor for authorship tasks; receives intent + facts, writes the code itself |
+| agent | `spec:plan-executor` | Sonnet, `xhigh` — default executor for authorship tasks; receives intent + facts, writes the code itself |
 | agent | `spec:plan-executor-light` | Sonnet, `medium` — no-authorship chores (verification runs, asset regeneration, exact-spec edits) |
 | agent | `spec:plan-executor-heavy` | Fable, `xhigh` — escalation target: failed/stuck tasks, cross-cutting fallout |
 | agent | `spec:plan-reviewer` | Opus, `high`, read-only — reviews each authorship task's diff against intent + acceptance criteria |
+
+The agents are workflow-agnostic: any session can dispatch them with an ad-hoc self-contained brief (intent, files, key facts, exemplar, acceptance criteria, targeted verification) — `spec:plan`/`spec:execute` are not required.
 | command | `/spec:setup` | verifies the docs configuration exists, manages the spec-specific config (`designSkill`) |
 
 ## Design principles
 
 - **Specs are durable, plans are scaffolding.** The spec carries intent, design decisions, and *key facts* (`file:line` anchors, existing helpers). A plan doc exists only when execution must cross a session boundary — and it carries **no implementation code**; executors write the code.
-- **Same-session execution by default.** The planning context is reused at cache prices; handing off to a fresh session pays full price to rebuild it. Handoff is for multi-day work, deferred runs, and near-full contexts.
+- **Same-session, subagent-driven by default.** The orchestrator reuses the planning context at cache prices while executors emit the code at the executor's price — output tokens are never cached, so the main-session model hand-writing implementations is the most expensive path. Inline execution is for small work; handoff is for multi-day work, deferred runs, and near-full contexts.
+- **Executors self-serve.** Every dispatch brief carries key facts, an exemplar where one exists, and the spec/plan paths — an under-briefed executor is the orchestrator's defect, not the executor's.
 - **Escalation-only routing.** Tasks never get silently downgraded to a cheaper model; they escalate on evidence (a failed attempt).
 - **Verification once.** Per-task verification is targeted tests only; the full build + lint + suite runs as the plan's final task (or pre-PR), never between tasks.
 - **Storage belongs to docs-hub.** This plugin consumes the `## docs configuration` block and the Docs Root symlink; it owns no provider logic. The legacy pre-write guard is gone by design: the symlink pins the exact store path, so plain file tools can never write to the wrong place (ADR 0001 in the project docs).

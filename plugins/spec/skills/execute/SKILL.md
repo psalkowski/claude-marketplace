@@ -23,9 +23,15 @@ For future remote providers (Notion, GDrive), the Docs Root is a read-only mirro
 
 3. **Dispatch loop — per task:**
 
-   - Dispatch by **explicit** `subagent_type` from the policy table — never auto-select by description. The dispatch prompt must be self-contained: the task's full text, the plan's Conventions, and the relevant Key facts. Executors write the code themselves; do not write it for them and do not expect the plan to contain it.
+   - Dispatch by **explicit** `subagent_type` from the policy table — never auto-select by description. The dispatch prompt is a **self-contained brief** containing all of:
+     1. the task's full text verbatim — intent, files, constraints, acceptance criteria, test cases, targeted verification command;
+     2. the plan's Conventions;
+     3. the relevant Key facts, including the exemplar (`file:line` of similar existing code to imitate) when the plan names one;
+     4. the plan and spec **file paths** plus the task's heading, so the executor can self-serve anything the brief missed.
+     Executors write the code themselves; do not write it for them and do not expect the plan to contain it.
    - **Review gate (authorship tasks only):** when the executor returns, dispatch `spec:plan-reviewer` on the task's diff. On **CHANGES-NEEDED**, re-dispatch the **same** executor with the ordered fix list, then review again. On **APPROVE**, move on. Light (no-authorship) tasks skip review.
    - **Escalation-only routing:** a task that failed, is stuck on a red test, or uncovered cross-file fallout gets re-dispatched to `spec:plan-executor-heavy` with the failure evidence attached. Never downgrade a task below its pin, and never "fix it quickly" in the orchestrator — that bypasses the review gate.
+   - **Brief-defect rule:** if an executor or reviewer report shows a task went wrong for lack of context — a fact you had but didn't pass, or one the plan never captured — the brief was the defect. Fix the brief (and the plan's Key facts, so later tasks inherit it) before re-dispatching; don't just bounce the same thin prompt back.
 
 4. **Honour stop gates.** If the plan says "stop and ask" before a task, stop and ask.
 

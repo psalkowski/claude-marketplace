@@ -10,7 +10,7 @@ A plan doc exists for exactly one reason: to let a session that wasn't present a
 
 **Conventions** — a handful of lines that apply to every task: commit format, TDD expectation, `.claude/rules/*.md` files to honor.
 
-**Key facts** — copy from the spec and extend with anything new found while planning: `file:line` anchors, existing helpers, persistence paths, gotchas. Executors get dispatched with these; they should never re-derive them.
+**Key facts** — copy from the spec and extend with anything new found while planning: `file:line` anchors, existing helpers with their signatures, persistence paths, gotchas — and, per task where one exists, an **exemplar**: `file:line` of existing code that does the same kind of thing, for the executor to imitate. Executors get dispatched with these; they should never re-derive them.
 
 **Tasks** — for each task:
 

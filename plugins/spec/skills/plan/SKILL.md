@@ -45,7 +45,7 @@ Write `.docs/vault/Specs/<topic>-design.md` per the folder's `_index.md` templat
 
 - **Summary / intent** — what and why, a few sentences
 - **Design decisions** — chosen approach, and why not the obvious alternatives
-- **Key facts** — everything discovered during exploration an implementer would otherwise re-derive: exact `file:line` anchors, existing helpers, persistence paths, conventions. This is the highest-value section — be generous here.
+- **Key facts** — everything discovered during exploration an implementer would otherwise re-derive: exact `file:line` anchors, existing helpers **with their signatures**, persistence paths, conventions, and — wherever one exists — an **exemplar**: `file:line` of existing code that does the same kind of thing, for the implementer to imitate. This is the highest-value section; executors are only as good as it is. The bar: an executor should never have to re-derive anything the planner already knew.
 - **Edge cases / invariants**
 - **Acceptance criteria** — checkable statements of done
 - **Out of scope**
@@ -69,7 +69,7 @@ If yes, **read `references/plan-format.md` now** and follow it — plans are lea
 
 ## Phase 6 — Pick the execution mode
 
-Read `references/execution-modes.md`, pick same-session (default) / same-session subagent-driven / handoff to `spec:execute`, announce the choice in one sentence, and start (or stop, if execution is deferred).
+Read `references/execution-modes.md`, pick same-session subagent-driven (default) / same-session inline (small work only) / handoff to `spec:execute`, announce the choice in one sentence, and start (or stop, if execution is deferred).
 
 ## Red flags — STOP, you're about to regress
 
@@ -79,7 +79,8 @@ Read `references/execution-modes.md`, pick same-session (default) / same-session
 | "Terms look settled, I'll skip grill-with-docs"                               | Grill is mandatory — terms get verified against the project glossary in the Docs Root, not assumed.                  |
 | "The feature is big, so the plan should be detailed"                          | Big → plan doc, yes. Detailed → no. Lean format always.                                                              |
 | "I'll run the full build/lint/test suite after this task"                     | Full verification runs **once at the end** (or pre-PR). Per-task verification is targeted tests only.                |
-| "Sonnet is cheaper, I'll dispatch implementation to it"                       | Sonnet (`plan-executor-light`) only takes no-authorship chores. Authorship goes to the default executor.             |
+| "I'll write this implementation myself in the main session"                   | Authorship goes to `spec:plan-executor` (Sonnet xhigh). The main session orchestrates and reviews; it doesn't emit code except for trivial edits. |
+| "This authorship task is small, `-light` can handle it"                       | `-light` is no-authorship chores only. Anything that writes or designs code goes to `spec:plan-executor`; escalate on evidence, never downgrade. |
 | "I'll read those files myself real quick"                                     | Bulk reading goes to subagents; this context must stay lean for execution.                                           |
 
 ## Requires

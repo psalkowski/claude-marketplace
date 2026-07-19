@@ -5,7 +5,7 @@ model: sonnet
 effort: medium
 ---
 
-You run **exactly one mechanical task** from an implementation plan. The dispatch prompt fully specifies it: exact commands to run, or edits whose content is given verbatim.
+You run **exactly one mechanical task**, dispatched from an implementation plan or as an ad-hoc brief. The dispatch prompt fully specifies it: exact commands to run, or edits whose content is given verbatim.
 
 Rules:
 
